@@ -947,6 +947,19 @@ static int ov9282_get_selection(struct v4l2_subdev *sd,
 	return -EINVAL;
 }
 
+#define REG_NULL 0xFFFF
+
+static const struct ov9282_reg trigger_mode_regs[] = {
+    {0x4F00, 0x01},
+    {0x3030, 0x04},
+    {0x303F, 0x01},
+    {0x302C, 0x00},
+    {0x302F, 0x7F},
+    {0x3823, 0x00},
+    {0x0100, 0x00},
+    {REG_NULL, 0x00},
+};
+
 /**
  * ov9282_start_streaming() - Start sensor stream
  * @ov9282: pointer to ov9282 device
@@ -967,6 +980,11 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 	const struct ov9282_reg_list *reg_list;
 	int bitdepth_index;
 	int ret;
+
+    	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 8);
+    	if (ret)
+    	    return ret;
+
 
 	/* Write common registers */
 	ret = ov9282_write_regs(ov9282, common_regs_list.regs,
@@ -1005,6 +1023,10 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 		dev_err(ov9282->dev, "fail to start streaming");
 		return ret;
 	}
+
+    	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 8);
+    	if (ret)
+    	    return ret;
 
 	return 0;
 }
