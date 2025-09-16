@@ -1450,7 +1450,7 @@ static int ov9282_probe(struct i2c_client *client)
 
 	/* Set default mode to first mode */
 	ov9282->cur_mode = &supported_modes[DEFAULT_MODE];
-	ov9282->code = MEDIA_BUS_FMT_Y10_1X10;
+	ov9282->code = MEDIA_BUS_FMT_Y8_1X8;
 	ov9282->vblank = ov9282->cur_mode->vblank;
 
 	ret = ov9282_init_controls(ov9282);
