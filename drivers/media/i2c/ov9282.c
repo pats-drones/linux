@@ -17,6 +17,7 @@
 #include <media/v4l2-event.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
+#include <linux/printk.h>
 
 /* Streaming Mode */
 #define OV9282_REG_MODE_SELECT	0x0100
@@ -960,6 +961,7 @@ static const struct ov9282_reg trigger_mode_regs[] = {
     {REG_NULL, 0x00},
 };
 
+// #define TRIGGER_MODE
 /**
  * ov9282_start_streaming() - Start sensor stream
  * @ov9282: pointer to ov9282 device
@@ -981,10 +983,11 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 	int bitdepth_index;
 	int ret;
 
-    	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 8);
-    	if (ret)
-    	    return ret;
-
+#ifdef TRIGGER_MODE
+	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 8);
+	if (ret)
+		return ret;
+#endif
 
 	/* Write common registers */
 	ret = ov9282_write_regs(ov9282, common_regs_list.regs,
@@ -1024,9 +1027,11 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 		return ret;
 	}
 
-    	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 8);
-    	if (ret)
-    	    return ret;
+#ifdef TRIGGER_MODE
+	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 8);
+	if (ret)
+		return ret;
+#endif
 
 	return 0;
 }
@@ -1313,6 +1318,7 @@ static int ov9282_power_off(struct device *dev)
  */
 static int ov9282_init_controls(struct ov9282 *ov9282)
 {
+	pr_info("OV9282: pats special driver version 1\n");
 	struct v4l2_ctrl_handler *ctrl_hdlr = &ov9282->ctrl_handler;
 	const struct ov9282_mode *mode = ov9282->cur_mode;
 	struct v4l2_fwnode_device_properties props;
