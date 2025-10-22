@@ -952,20 +952,24 @@ static int ov9282_get_selection(struct v4l2_subdev *sd,
 
 /* External trigger mode configuration for OV9281 / OV9282 */
 static const struct ov9282_reg trigger_mode_regs[] = {
-    {0x4F00, 0x01},  /* Power control: enable external trigger domain */
-    {0x3030, 0x04},  /* Bit2=1 → external trigger snapshot mode */
-    {0x303F, 0x01},  /* One frame per FSIN pulse */
-    {0x302C, 0x00},  /* Sleep lines high byte */
-    {0x302F, 0x7F},  /* Sleep lines low byte */
-    {0x3046, 0x01},  /* Enable GS overlap (dual charge-storage buffers) */
-    {0x3823, 0x60},  /* Bit6=1 ext_vs_re (rising-edge), Bit5=1 ext_vs_en (enable FSIN) */
-    {0x3826, 0x00},  /* FSIN delay high byte */
-    {0x3827, 0x01},  /* FSIN delay low byte → 1-frame pipeline delay */
-    {0x0100, 0x00},  /* Ensure sensor starts in standby */
+// Make FSIN a pin input (not output)
+{0x3006, 0x00},
+
+// Enable external VSYNC (use FSIN to align start-of-frame)
+// Many setups use 0x30 here (ext_vs_en + r_init_man)
+{0x3823, 0x30},
+
+// Ensure external-trigger *snapshot/low-power* features are OFF
+{0x4F00, 0x00}, //   # Power control: normal mode (not low-power)
+{0x3030, 0x00}, //   # Low-power / snapshot trigger control: disabled
+{0x303F, 0x00}, //   # "frames on trigger" not used in continuous sync
+
+// Start streaming
+//{0x0100, 0x01}, //
     {REG_NULL, 0x00},
 };
 
-// #define TRIGGER_MODE
+#define TRIGGER_MODE
 /**
  * ov9282_start_streaming() - Start sensor stream
  * @ov9282: pointer to ov9282 device
