@@ -950,14 +950,18 @@ static int ov9282_get_selection(struct v4l2_subdev *sd,
 
 #define REG_NULL 0xFFFF
 
+/* External trigger mode configuration for OV9281 / OV9282 */
 static const struct ov9282_reg trigger_mode_regs[] = {
-    {0x4F00, 0x01},
-    {0x3030, 0x04},
-    {0x303F, 0x01},
-    {0x302C, 0x00},
-    {0x302F, 0x7F},
-    {0x3823, 0x00},
-    {0x0100, 0x00},
+    {0x4F00, 0x01},  /* Power control: enable external trigger domain */
+    {0x3030, 0x04},  /* Bit2=1 → external trigger snapshot mode */
+    {0x303F, 0x01},  /* One frame per FSIN pulse */
+    {0x302C, 0x00},  /* Sleep lines high byte */
+    {0x302F, 0x7F},  /* Sleep lines low byte */
+    {0x3046, 0x01},  /* Enable GS overlap (dual charge-storage buffers) */
+    {0x3823, 0x60},  /* Bit6=1 ext_vs_re (rising-edge), Bit5=1 ext_vs_en (enable FSIN) */
+    {0x3826, 0x00},  /* FSIN delay high byte */
+    {0x3827, 0x01},  /* FSIN delay low byte → 1-frame pipeline delay */
+    {0x0100, 0x00},  /* Ensure sensor starts in standby */
     {REG_NULL, 0x00},
 };
 
