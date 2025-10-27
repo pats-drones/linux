@@ -54,6 +54,7 @@
 Module.symvers
 dtbs-list
 modules.order
+!drivers/media/i2c/ov9282.ko
 
 #
 # Top-level generic files
