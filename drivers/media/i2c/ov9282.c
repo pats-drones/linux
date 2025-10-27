@@ -207,12 +207,12 @@ static const struct ov9282_reg common_regs[] = {
 	{0x3001, 0x00},
 	{0x3004, 0x00},
 	{0x3005, 0x00},
-	{0x3006, 0x04},
+	// {0x3006, 0x04},
 	{0x3011, 0x0a},
 	{0x3013, 0x18},
 	{0x301c, 0xf0},
 	{0x3022, 0x01},
-	{0x3030, 0x10},
+	// {0x3030, 0x10},
 	{0x3039, 0x32},
 	{0x303a, 0x00},
 	{0x3503, 0x08},
@@ -1326,7 +1326,12 @@ static int ov9282_power_off(struct device *dev)
  */
 static int ov9282_init_controls(struct ov9282 *ov9282)
 {
-	pr_info("OV9282: pats special driver version 1\n");
+	pr_info("OV9282: pats special driver: continous without some regs\n");
+	pr_info("OV9282: /* in common_regs[]: DELETE these */"
+"{0x3006, 0x04},"
+"{0x3030, 0x10},\n");
+
+	
 	struct v4l2_ctrl_handler *ctrl_hdlr = &ov9282->ctrl_handler;
 	const struct ov9282_mode *mode = ov9282->cur_mode;
 	struct v4l2_fwnode_device_properties props;
