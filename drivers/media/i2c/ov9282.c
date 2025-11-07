@@ -957,7 +957,7 @@ static const struct ov9282_reg trigger_mode_regs[] = {
 
 // Enable external VSYNC (use FSIN to align start-of-frame)
 // Many setups use 0x30 here (ext_vs_en + r_init_man)
-{0x3823, 0x30},
+{0x3823, 0x3C},
 
 // Ensure external-trigger *snapshot/low-power* features are OFF
 {0x4F00, 0x00}, //   # Power control: normal mode (not low-power)
@@ -1326,12 +1326,11 @@ static int ov9282_power_off(struct device *dev)
  */
 static int ov9282_init_controls(struct ov9282 *ov9282)
 {
-	pr_info("OV9282: pats special driver: continous without some regs\n");
-	pr_info("OV9282: /* in common_regs[]: DELETE these */"
-"{0x3006, 0x04},"
-"{0x3030, 0x10},\n");
+	pr_info("OV9282: pats special driver: 0x3823==0x3C\n");
+	pr_info("OV9282: version 2\n");
+	pr_info("OV9282: nov 7\n");
+	pr_info("OV9282: {0x3823, 0x3C}\n");
 
-	
 	struct v4l2_ctrl_handler *ctrl_hdlr = &ov9282->ctrl_handler;
 	const struct ov9282_mode *mode = ov9282->cur_mode;
 	struct v4l2_fwnode_device_properties props;
