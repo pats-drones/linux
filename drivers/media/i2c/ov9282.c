@@ -321,7 +321,7 @@ static const struct ov9282_reg mode_1280x720_regs[] = {
 	{0x3808, 0x05},
 	{0x3809, 0x00},
 	{0x380a, 0x02},
-	{0x380b, 0xd0},
+	{0x380b, 0xD0},
 	{0x3810, 0x00},
 	{0x3811, 0x08},
 	{0x3812, 0x00},
@@ -951,22 +951,19 @@ static int ov9282_get_selection(struct v4l2_subdev *sd,
 #define REG_NULL 0xFFFF
 
 /* External trigger mode configuration for OV9281 / OV9282 */
+/* NOTE: we add two registers (0x3826/0x3827) to delay FSIN reset a bit */
 static const struct ov9282_reg trigger_mode_regs[] = {
-// Make FSIN a pin input (not output)
-{0x3006, 0x00},
-
-// Enable external VSYNC (use FSIN to align start-of-frame)
-// Many setups use 0x30 here (ext_vs_en + r_init_man)
-{0x3823, 0x3C},
-
-// Ensure external-trigger *snapshot/low-power* features are OFF
-{0x4F00, 0x00}, //   # Power control: normal mode (not low-power)
-{0x3030, 0x00}, //   # Low-power / snapshot trigger control: disabled
-{0x303F, 0x00}, //   # "frames on trigger" not used in continuous sync
-
-// Start streaming
-//{0x0100, 0x01}, //
-    {REG_NULL, 0x00},
+	{0x3006, 0x00},  /* FSIN pin input */
+	{0x3823, 0x60},  /* Enable FSIN gating */
+	/* FSIN delay ~200 lines (~2 ms at your timing); tune as needed */
+	{0x3824, 0x00},
+	{0x3825, 0x00},
+	{0x3826, 0x01},
+	{0x3827, 0xC8},
+	/* Ensure external-trigger *snapshot/low-power* features are OFF */
+	{0x4F00, 0x00},  /* normal power mode */
+	{0x3030, 0x00},  /* snapshot trigger control disabled */
+	{0x303F, 0x00},  /* frames-on-trigger disabled */
 };
 
 #define TRIGGER_MODE
@@ -992,7 +989,8 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 	int ret;
 
 #ifdef TRIGGER_MODE
-	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 8);
+	/* Write trigger mode regs early (pre-stream) */
+	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 10);
 	if (ret)
 		return ret;
 #endif
@@ -1036,7 +1034,8 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 	}
 
 #ifdef TRIGGER_MODE
-	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 8);
+	/* Re-apply trigger regs post-stream in case streaming overwrote any */
+	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 10);
 	if (ret)
 		return ret;
 #endif
@@ -1562,5 +1561,6 @@ static struct i2c_driver ov9282_driver = {
 
 module_i2c_driver(ov9282_driver);
 
-MODULE_DESCRIPTION("OmniVision ov9282 sensor driver");
+MODULE_DESCRIPTION("OmniVision ov9282 sensor driver (continuous mode with trigger 0x3823=0x60)");
 MODULE_LICENSE("GPL");
+
