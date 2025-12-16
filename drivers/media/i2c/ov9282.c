@@ -1033,6 +1033,10 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 		return ret;
 	}
 
+	/* Apply sensor orientation AFTER mode registers */
+	ov9282_set_ctrl_hflip(ov9282, 1);
+	ov9282_set_ctrl_vflip(ov9282, 1);
+
 #ifdef TRIGGER_MODE
 	/* Re-apply trigger regs post-stream in case streaming overwrote any */
 	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 10);
