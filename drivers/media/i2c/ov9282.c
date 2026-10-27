@@ -73,11 +73,24 @@
 #define OV9282_LINK_FREQ	400000000
 #define OV9282_NUM_DATA_LANES	2
 
-/* Pixel rate */
-#define OV9282_PIXEL_RATE_10BIT		(OV9282_LINK_FREQ * 2 * \
-					 OV9282_NUM_DATA_LANES / 10)
-#define OV9282_PIXEL_RATE_8BIT		(OV9282_LINK_FREQ * 2 * \
-					 OV9282_NUM_DATA_LANES / 8)
+/*
+ * Sensor pixel/timing rates reported through V4L2.
+ *
+ * RAW10 uses the standard 160 Mpix/s rate derived from the 400 MHz
+ * CSI-2 link frequency, 2 DDR edges and 2 data lanes.
+ *
+ * RAW8 is different on this OV9281 configuration: the RAW8 PLL2 setting
+ * (0x030d = 0x60) gives a 96 MHz timing clock and the sensor HTS register
+ * counts two output pixels per timing count.  Therefore the effective pixel
+ * timing rate used for HTS/VTS/frame-duration calculations is 192 Mpix/s.
+ * Reporting 200 Mpix/s here made a requested 11111 us frame duration run at
+ * about 86.4 fps.  Reporting 192 Mpix/s makes 11111 us correspond to ~90 fps.
+ *
+ * Keep OV9282_LINK_FREQ at 400 MHz: that is the CSI-2 link frequency and is
+ * independent from this sensor timing-rate correction.
+ */
+#define OV9282_PIXEL_RATE_10BIT		160000000
+#define OV9282_PIXEL_RATE_8BIT		192000000
 
 /*
  * OV9282 native and active pixel array size.
@@ -950,23 +963,33 @@ static int ov9282_get_selection(struct v4l2_subdev *sd,
 
 #define REG_NULL 0xFFFF
 
-/* External trigger mode configuration for OV9281 / OV9282 */
-/* NOTE: we add two registers (0x3826/0x3827) to delay FSIN reset a bit */
-static const struct ov9282_reg trigger_mode_regs[] = {
-	{0x3006, 0x00},  /* FSIN pin input */
-	{0x3823, 0x60},  /* Enable FSIN gating */
-	/* FSIN delay ~200 lines (~2 ms at your timing); tune as needed */
-	{0x3824, 0x00},
+/*
+ * Experimental one-shot FSIN synchronization configuration.
+ *
+ * The sensor remains in normal continuous-streaming mode. External VSYNC is
+ * enabled through TIMING_REG23, but the documented low-power external-trigger
+ * snapshot mode remains disabled. The intended test is to start both cameras,
+ * send ONE common rising-edge pulse on FSIN, and then leave FSIN low. Do not
+ * run a periodic PWM signal with this build.
+ *
+ * This is an experimental use of the external-VSYNC logic: the datasheet does
+ * not explicitly guarantee that one FSIN edge will phase-align two sensors and
+ * then let them continue indefinitely in the normal overlapped streaming
+ * pipeline. The test result (sensor dt_us and exposure behaviour) is therefore
+ * the validation.
+ */
+static const struct ov9282_reg one_shot_sync_regs[] = {
+	{0x3006, 0x00},  /* FSIN/VSYNC pad input */
+	{0x3823, 0x60},  /* ext_vs_re=1, ext_vs_en=1 */
+	{0x3824, 0x00},  /* CS reset value at vs_ext = 0 */
 	{0x3825, 0x00},
-	{0x3826, 0x01},
-	{0x3827, 0xC8},
-	/* Ensure external-trigger *snapshot/low-power* features are OFF */
+	{0x3826, 0x00},  /* R reset value at vs_ext = 0 */
+	{0x3827, 0x00},
 	{0x4F00, 0x00},  /* normal power mode */
-	{0x3030, 0x00},  /* snapshot trigger control disabled */
+	{0x3030, 0x00},  /* low-frame-rate / external snapshot modes disabled */
 	{0x303F, 0x00},  /* frames-on-trigger disabled */
 };
 
-#define TRIGGER_MODE
 /**
  * ov9282_start_streaming() - Start sensor stream
  * @ov9282: pointer to ov9282 device
@@ -987,13 +1010,6 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 	const struct ov9282_reg_list *reg_list;
 	int bitdepth_index;
 	int ret;
-
-#ifdef TRIGGER_MODE
-	/* Write trigger mode regs early (pre-stream) */
-	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 10);
-	if (ret)
-		return ret;
-#endif
 
 	/* Write common registers */
 	ret = ov9282_write_regs(ov9282, common_regs_list.regs,
@@ -1018,6 +1034,14 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 		return ret;
 	}
 
+	/* Arm external VSYNC input while keeping normal streaming mode selected. */
+	ret = ov9282_write_regs(ov9282, one_shot_sync_regs,
+				ARRAY_SIZE(one_shot_sync_regs));
+	if (ret) {
+		dev_err(ov9282->dev, "fail to configure one-shot FSIN sync mode");
+		return ret;
+	}
+
 	/* Setup handler will write actual exposure and gain */
 	ret =  __v4l2_ctrl_handler_setup(ov9282->sd.ctrl_handler);
 	if (ret) {
@@ -1037,12 +1061,17 @@ static int ov9282_start_streaming(struct ov9282 *ov9282)
 	ov9282_set_ctrl_hflip(ov9282, 1);
 	ov9282_set_ctrl_vflip(ov9282, 1);
 
-#ifdef TRIGGER_MODE
-	/* Re-apply trigger regs post-stream in case streaming overwrote any */
-	ret = ov9282_write_regs(ov9282, trigger_mode_regs, 10);
-	if (ret)
+	/*
+	 * Re-arm external VSYNC after entering streaming, without generating an
+	 * FSIN edge. GPIO18 must still be held low at this point. After BOTH
+	 * cameras are streaming, issue one common FSIN pulse externally.
+	 */
+	ret = ov9282_write_regs(ov9282, one_shot_sync_regs,
+				ARRAY_SIZE(one_shot_sync_regs));
+	if (ret) {
+		dev_err(ov9282->dev, "fail to arm one-shot FSIN sync after stream-on");
 		return ret;
-#endif
+	}
 
 	return 0;
 }
@@ -1329,10 +1358,8 @@ static int ov9282_power_off(struct device *dev)
  */
 static int ov9282_init_controls(struct ov9282 *ov9282)
 {
-	pr_info("OV9282: pats special driver: 0x3823==0x3C\n");
-	pr_info("OV9282: version 2\n");
-	pr_info("OV9282: nov 7\n");
-	pr_info("OV9282: {0x3823, 0x3C}\n");
+	pr_info("OV9282: PATS free-running driver, external FSIN disabled\n");
+	pr_info("OV9282: RAW8 timing pixel rate = 192 MHz\n");
 
 	struct v4l2_ctrl_handler *ctrl_hdlr = &ov9282->ctrl_handler;
 	const struct ov9282_mode *mode = ov9282->cur_mode;
@@ -1565,6 +1592,6 @@ static struct i2c_driver ov9282_driver = {
 
 module_i2c_driver(ov9282_driver);
 
-MODULE_DESCRIPTION("OmniVision ov9282 sensor driver (continuous mode with trigger 0x3823=0x60)");
+MODULE_DESCRIPTION("OmniVision ov9282 sensor driver (90 fps timing, experimental one-shot FSIN synchronization)");
 MODULE_LICENSE("GPL");
 
